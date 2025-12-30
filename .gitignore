@@ -1,0 +1,36 @@
+# ROS 2 workspace build artifacts
+catkin_ws/build/
+catkin_ws/install/
+catkin_ws/log/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Markdown documentation files (as requested)
+*.md
+
+# Maps directory (user-generated content)
+catkin_ws/src/turtlebot3_mapping/maps/
+
+# Temporary files
+*.tmp
+*.bak
+*.log
+
+# Colcon ignore files
+COLCON_IGNORE
+
