@@ -17,6 +17,7 @@ find_package(nav_msgs REQUIRED)
 # Install launch files
 install(DIRECTORY launch/
   DESTINATION share/${PROJECT_NAME}/launch
+  FILES_MATCHING PATTERN "*.py"
 )
 
 # Install scripts

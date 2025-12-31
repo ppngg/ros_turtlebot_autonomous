@@ -10,12 +10,11 @@ import math
 class ExploreNode(Node):
     def __init__(self):
         super().__init__('explore_node')
-        
-        # Declare parameters
+
         self.declare_parameter('velocity.linear', 0.3)
         self.declare_parameter('velocity.angular', 1.0)
-        self.declare_parameter('obstacle_distance', 0.4)  # meters - stop and turn if obstacle closer
-        self.declare_parameter('safe_distance', 0.6)  # meters - slow down if obstacle closer
+        self.declare_parameter('obstacle_distance', 0.4)  # unit: meter, stop and turn if obstacle closer
+        self.declare_parameter('safe_distance', 0.6)  #slow down if obstacle closer
         
         self.cmd_vel_pub = self.create_publisher(TwistStamped, '/cmd_vel', 10)
         
@@ -36,9 +35,9 @@ class ExploreNode(Node):
         self.last_front_distance = float('inf')
         self.is_reversing = False
         self.reverse_start_time = None
-        self.reverse_duration = 2.0  # if stuck -> reverse for x seconds
+        self.reverse_duration = 1.0  # if stuck -> reverse for x seconds
         
-        self.get_logger().info("Explore node started - Vacuum robot style navigation")
+        self.get_logger().info("Explore node started")
         self.get_logger().info(f"Parameters: linear={self.get_parameter('velocity.linear').value}, "
                               f"angular={self.get_parameter('velocity.angular').value}, "
                               f"obstacle_distance={self.get_parameter('obstacle_distance').value}m")
@@ -49,7 +48,7 @@ class ExploreNode(Node):
         self.safe_distance = self.get_parameter('safe_distance').value
     
     def get_min_distance_in_sector(self, start_angle_deg, end_angle_deg):
-        # Get minimum distance in a sector (in degrees, relative to robot front)
+        # in degrees, relative to robot front
         if self.scan_data is None or len(self.scan_data.ranges) == 0:
             return float('inf')
         
@@ -79,16 +78,19 @@ class ExploreNode(Node):
         
         return min_dist
     
-    def update_cmd_vel(self, linear, angular):
-        """Publish velocity command using TwistStamped"""
+    def update_cmd_vel(self, linear, angular, linear_param=None, angular_param=None, front_dist=None, left_dist=None, right_dist=None):
+        # publish velocity command
         twist_stamped = TwistStamped()
         twist_stamped.header.stamp = self.get_clock().now().to_msg()
         twist_stamped.header.frame_id = 'base_footprint'
         twist_stamped.twist.linear.x = linear
         twist_stamped.twist.angular.z = angular
         self.cmd_vel_pub.publish(twist_stamped)
+        
+        if linear_param is not None and angular_param is not None and front_dist is not None and left_dist is not None and right_dist is not None:
+            self.get_logger().info(f"linear={linear_param:.1f}, angular={angular_param:.1f}, Front: {front_dist:.2f}m, Left: {left_dist:.2f}m, Right: {right_dist:.2f}m")
     
-    def update_callback(self):
+    def update_callback(self): 
         if self.scan_data is None:
             # Move forward slowly if no scan data
             linear_speed = self.get_parameter('velocity.linear').value * 0.2
@@ -99,7 +101,7 @@ class ExploreNode(Node):
         angular_speed = self.get_parameter('velocity.angular').value
         current_time = self.get_clock().now()
         
-        # Check distances in different sectors
+        # divide to 3 sectors: front, left, right
         front_dist = self.get_min_distance_in_sector(-30, 30)  # Front 60 degrees
         left_dist = self.get_min_distance_in_sector(30, 90)    # Left side
         right_dist = self.get_min_distance_in_sector(-90, -30)  # Right side
@@ -128,9 +130,9 @@ class ExploreNode(Node):
                     # Reverse while turning
                     reverse_speed = linear_speed * 0.5
                     if self.reverse_direction == 'LEFT':
-                        self.update_cmd_vel(-reverse_speed, angular_speed * 0.6)
+                        self.update_cmd_vel(-reverse_speed, angular_speed * 0.6, linear_speed, angular_speed, front_dist, left_dist, right_dist)
                     else:
-                        self.update_cmd_vel(-reverse_speed, -angular_speed * 0.6)
+                        self.update_cmd_vel(-reverse_speed, -angular_speed * 0.6, linear_speed, angular_speed, front_dist, left_dist, right_dist)
                     return
                 else:
                     # Stop
@@ -147,53 +149,45 @@ class ExploreNode(Node):
             # Obstacle directly ahead -> turn away more aggressively
             if left_dist > right_dist + 0.1:
                 # More space on left, turn left
-                self.update_cmd_vel(0.0, angular_speed)
+                self.update_cmd_vel(0.0, angular_speed, linear_speed, angular_speed, front_dist, left_dist, right_dist)
                 self.get_logger().debug(f"Obstacle ahead (front: {front_dist:.2f}m). Turning LEFT (left: {left_dist:.2f}m, right: {right_dist:.2f}m)")
             elif right_dist > left_dist + 0.1:
                 # More space on right, turn right
-                self.update_cmd_vel(0.0, -angular_speed)
+                self.update_cmd_vel(0.0, -angular_speed, linear_speed, angular_speed, front_dist, left_dist, right_dist)
                 self.get_logger().debug(f"Obstacle ahead (front: {front_dist:.2f}m). Turning RIGHT (left: {left_dist:.2f}m, right: {right_dist:.2f}m)")
             else:
                 # Very close distances -> turn in place more aggressively
                 if left_dist > right_dist:
-                    self.update_cmd_vel(0.0, angular_speed * 1.2)
+                    self.update_cmd_vel(0.0, angular_speed * 1.2, linear_speed, angular_speed, front_dist, left_dist, right_dist)
                 else:
-                    self.update_cmd_vel(0.0, -angular_speed * 1.2)
+                    self.update_cmd_vel(0.0, -angular_speed * 1.2, linear_speed, angular_speed, front_dist, left_dist, right_dist)
         
         elif front_dist < self.safe_distance:
             # Getting close to obstacle -> slow down and turn slightly
             if left_dist > right_dist + 0.1:
                 # More space on left -> turn left slightly while moving
-                self.update_cmd_vel(linear_speed * 0.4, angular_speed * 0.6)
+                self.update_cmd_vel(linear_speed * 0.4, angular_speed * 0.6, linear_speed, angular_speed, front_dist, left_dist, right_dist)
             elif right_dist > left_dist + 0.1:
                 # More space on right -> turn right slightly while moving
-                self.update_cmd_vel(linear_speed * 0.4, -angular_speed * 0.6)
+                self.update_cmd_vel(linear_speed * 0.4, -angular_speed * 0.6, linear_speed, angular_speed, front_dist, left_dist, right_dist)
             else:
                 # Similar distances -> slow down more
-                self.update_cmd_vel(linear_speed * 0.3, 0.0)
+                self.update_cmd_vel(linear_speed * 0.3, 0.0, linear_speed, angular_speed, front_dist, left_dist, right_dist)
         
         elif left_dist < self.obstacle_distance * 1.2:
             # Obstacle on left -> follow wall while turning right slightly
-            self.update_cmd_vel(linear_speed, -angular_speed * 0.3)
+            self.update_cmd_vel(linear_speed, -angular_speed * 0.3, linear_speed, angular_speed, front_dist, left_dist, right_dist)
         
         elif right_dist < self.obstacle_distance * 1.2:
             # obstacle on right
-            self.update_cmd_vel(linear_speed, angular_speed * 0.3)
+            self.update_cmd_vel(linear_speed, angular_speed * 0.3, linear_speed, angular_speed, front_dist, left_dist, right_dist)
         
         else:
             # Clear path
-            self.update_cmd_vel(linear_speed, 0.0)
+            self.update_cmd_vel(linear_speed, 0.0, linear_speed, angular_speed, front_dist, left_dist, right_dist)
             # Reset stuck counter when moving forward
             self.stuck_counter = 0
         
-        # debug
-        if not hasattr(self, '_debug_counter'):
-            self._debug_counter = 0
-        self._debug_counter += 1
-        if self._debug_counter % 40 == 0:  # Log every 40th message (2 seconds at 20Hz)
-            self.get_logger().info(
-                f"Front: {front_dist:.2f}m, Left: {left_dist:.2f}m, Right: {right_dist:.2f}m"
-            )
 
 
 def main(args=None):

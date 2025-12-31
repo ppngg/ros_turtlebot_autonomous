@@ -31,7 +31,6 @@ class MapSaverNode(Node):
         self.get_logger().info(f"Map will be saved as: {map_name}")
     
     def map_callback(self, msg):
-        """Callback when map is received"""
         if not self.map_received:
             self.map_received = True
             self.get_logger().info(f"Map received! Resolution: {msg.info.resolution}m/pixel")
@@ -57,10 +56,7 @@ def main(args=None):
     try:
         rclpy.spin_once(map_saver, timeout_sec=5.0)
         if map_saver.map_received:
-            map_saver.get_logger().info("Map is being generated successfully!")
-            map_saver.get_logger().info("To save the map, use: ros2 run nav2_map_server map_saver_cli -f <map_name>")
-        else:
-            map_saver.get_logger().warn("No map received yet. Make sure SLAM is running and robot is moving.")
+            map_saver.get_logger().info("Map generated successfully!")
     except Exception as e:
         map_saver.get_logger().error(f"Error: {e}")
     finally:
